@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PPC Audit Console · Amazon PPC audits, profit and structure, all local</title>
+  <meta name="description" content="Upload your Amazon exports. Get flags, bid plans, profit P&L, structure tiers and ready-to-upload bulk files. 100% local, no API keys." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #0b0e11;        /* canvas */
+      --panel: #1e2329;      /* surface */
+      --edge: #2b3139;       /* hairline */
+      --mute: #707a8a;       /* secondary text */
+      --body: #eaecef;       /* primary text */
+      --yellow: #FCD535;     /* single accent */
+      --yellow-active: #f0b90b;
+      --up: #0ecb81;
+      --down: #f6465d;
+      --radius: 12px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--ink);
+      color: var(--body);
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .icon {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal; font-style: normal; display: inline-block;
+      line-height: 1; letter-spacing: normal; text-transform: none;
+      white-space: nowrap; word-wrap: normal; direction: ltr;
+      -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga';
+    }
+
+    /* ---- Binance-style canvas: flat ink + one restrained yellow bloom + faint grid */
+    .bg {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(900px 420px at 78% -10%, rgba(252, 213, 53, 0.07), transparent 60%),
+        radial-gradient(700px 500px at -10% 40%, rgba(14, 203, 129, 0.04), transparent 60%),
+        var(--ink);
+    }
+    .bg::after {
+      content: ""; position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(43, 49, 57, 0.35) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(43, 49, 57, 0.35) 1px, transparent 1px);
+      background-size: 72px 72px;
+      mask-image: radial-gradient(1200px 600px at 60% 0%, rgba(0,0,0,0.55), transparent 75%);
+      -webkit-mask-image: radial-gradient(1200px 600px at 60% 0%, rgba(0,0,0,0.55), transparent 75%);
+    }
+
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---- nav */
+    nav {
+      position: sticky; top: 0; z-index: 40; height: 64px;
+      display: flex; align-items: center;
+      background: rgba(11, 14, 17, 0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--edge);
+    }
+    nav .wrap { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+    .wordmark { display: flex; align-items: center; gap: 10px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; }
+    .wordmark .mark {
+      width: 28px; height: 28px; border-radius: 6px; background: var(--yellow);
+      color: #0b0e11; display: grid; place-items: center; font-size: 17px; font-weight: 700;
+    }
+    .wordmark em { color: var(--yellow); font-style: normal; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+      border-radius: 6px; border: 0; cursor: pointer; text-decoration: none;
+      font-family: Inter, sans-serif; font-weight: 600; font-size: 14px;
+      padding: 10px 20px; transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn:active { transform: translateY(1px) scale(0.99); }
+    .btn-primary { background: var(--yellow); color: #0b0e11; }
+    .btn-primary:hover { background: var(--yellow-active); }
+    .btn-ghost { background: transparent; color: var(--body); border: 1px solid var(--edge); }
+    .btn-ghost:hover { border-color: var(--mute); }
+    .btn-lg { padding: 13px 26px; font-size: 15px; }
+
+    /* ---- hero: asymmetric split */
+    .hero { padding: 88px 0 72px; }
+    .hero .wrap { display: grid; grid-template-columns: 7fr 5fr; gap: 56px; align-items: center; }
+    .hero h1 {
+      font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+      line-height: 1.08; letter-spacing: -0.03em; font-weight: 700;
+    }
+    .hero h1 .hl { color: var(--yellow); }
+    .hero p.sub {
+      margin-top: 18px; color: var(--mute); font-size: 17px; max-width: 34rem;
+    }
+    .hero .ctas { margin-top: 30px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* hero visual: the real tier ladder as a typographic composition */
+    .ladder {
+      background: var(--panel); border: 1px solid var(--edge); border-radius: var(--radius);
+      padding: 20px; font-family: 'JetBrains Mono', monospace;
+    }
+    .ladder .cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--mute); margin-bottom: 12px; }
+    .ladder ol { list-style: none; }
+    .ladder li {
+      display: flex; align-items: baseline; gap: 12px;
+      padding: 9px 10px; border-radius: 8px; font-size: 13px;
+    }
+    .ladder li + li { margin-top: 2px; }
+    .ladder .n { color: var(--mute); font-size: 12px; width: 4.5rem; flex-shrink: 0; }
+    .ladder .t { color: var(--body); font-weight: 600; }
+    .ladder li.on { background: rgba(252, 213, 53, 0.09); border: 1px solid rgba(252, 213, 53, 0.25); }
+    .ladder li.on .t { color: var(--yellow); }
+    .ladder li.on .n { color: var(--yellow); opacity: 0.7; }
+
+    /* ---- stats strip */
+    .stats { border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge); background: rgba(30, 35, 41, 0.4); }
+    .stats .wrap {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      padding-top: 28px; padding-bottom: 28px; gap: 24px;
+    }
+    .stat .v { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: var(--yellow); }
+    .stat .k { color: var(--mute); font-size: 13px; margin-top: 2px; }
+
+    /* ---- sections */
+    section { padding: 88px 0; }
+    .sec-head { max-width: 640px; margin-bottom: 44px; }
+    .sec-head h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.02em; line-height: 1.15; }
+    .sec-head p { color: var(--mute); margin-top: 12px; }
+
+    /* bento */
+    .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
+    .cell {
+      background: var(--panel); border: 1px solid var(--edge); border-radius: var(--radius);
+      padding: 24px; transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .cell:hover { border-color: var(--mute); transform: translateY(-2px); }
+    .cell .icon { font-size: 26px; color: var(--yellow); }
+    .cell h3 { font-size: 16px; margin: 14px 0 6px; letter-spacing: -0.01em; }
+    .cell p { color: var(--mute); font-size: 13.5px; line-height: 1.55; }
+    .c-3 { grid-column: span 3; }
+    .c-2 { grid-column: span 2; }
+    .c-4 { grid-column: span 4; }
+    .cell.tint-y {
+      background: linear-gradient(145deg, rgba(252, 213, 53, 0.10), rgba(30, 35, 41, 0.9) 55%);
+      border-color: rgba(252, 213, 53, 0.22);
+    }
+    .cell.tint-g {
+      background: linear-gradient(145deg, rgba(14, 203, 129, 0.09), rgba(30, 35, 41, 0.9) 55%);
+      border-color: rgba(14, 203, 129, 0.2);
+    }
+    .cell .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .chip {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--body);
+      border: 1px solid var(--edge); border-radius: 4px; padding: 3px 8px;
+    }
+
+    /* how it works: 3 verbs */
+    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .step { border-top: 2px solid var(--edge); padding-top: 20px; position: relative; }
+    .step:first-child { border-top-color: var(--yellow); }
+    .step .icon { font-size: 24px; color: var(--mute); }
+    .step:first-child .icon { color: var(--yellow); }
+    .step h3 { font-size: 17px; margin: 12px 0 8px; }
+    .step p { color: var(--mute); font-size: 14px; }
+
+    /* cadence rail */
+    .rail { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .cad {
+      background: var(--panel); border: 1px solid var(--edge); border-radius: var(--radius);
+      padding: 18px 16px;
+    }
+    .cad .f { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.1em; }
+    .cad h3 { font-size: 14.5px; margin: 8px 0 6px; }
+    .cad p { color: var(--mute); font-size: 12.5px; line-height: 1.5; }
+
+    /* local-first / final CTA (centered manifesto, deliberate) */
+    .final { text-align: center; padding: 104px 0 112px; }
+    .final .lock { color: var(--up); font-size: 30px; }
+    .final h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); letter-spacing: -0.02em; margin-top: 14px; }
+    .final p { color: var(--mute); max-width: 36rem; margin: 14px auto 0; }
+    .final .ctas { margin-top: 30px; }
+
+    footer { border-top: 1px solid var(--edge); padding: 26px 0; }
+    footer .wrap { display: flex; justify-content: space-between; align-items: center; color: var(--mute); font-size: 13px; }
+
+    /* entrance motion (hero only) */
+    @media (prefers-reduced-motion: no-preference) {
+      .hero .col-l > *, .hero .ladder { opacity: 0; transform: translateY(16px); animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .hero .col-l > :nth-child(2) { animation-delay: 0.08s; }
+      .hero .col-l > :nth-child(3) { animation-delay: 0.16s; }
+      .hero .ladder { animation-delay: 0.2s; }
+      @keyframes rise { to { opacity: 1; transform: none; } }
+    }
+
+    /* mobile collapse */
+    @media (max-width: 900px) {
+      .hero { padding: 56px 0 48px; }
+      .hero .wrap { grid-template-columns: 1fr; gap: 36px; }
+      .stats .wrap { grid-template-columns: repeat(2, 1fr); }
+      .bento { grid-template-columns: 1fr; }
+      .c-3, .c-2, .c-4 { grid-column: span 1; }
+      .flow { grid-template-columns: 1fr; }
+      .rail { grid-template-columns: 1fr 1fr; }
+      section { padding: 56px 0; }
+    }
+    @media (max-width: 520px) { .rail { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+
+  <nav>
+    <div class="wrap">
+      <div class="wordmark"><span class="mark">P</span>PPC<em>Audit</em> Console</div>
+      <a class="btn btn-primary" href="/login">Log in</a>
+    </div>
+  </nav>
+
+  <!-- hero -->
+  <header class="hero">
+    <div class="wrap">
+      <div class="col-l">
+        <h1>Your Amazon PPC, audited like a <span class="hl">trading desk</span>.</h1>
+        <p class="sub">Upload your Amazon exports. Get flags, bid plans, profit P&amp;L and ready-to-upload bulk files back.</p>
+        <div class="ctas">
+          <a class="btn btn-primary btn-lg" href="/login">Log in</a>
+          <a class="btn btn-ghost btn-lg" href="#tools">Explore the toolkit</a>
+        </div>
+      </div>
+      <aside class="ladder" aria-label="Structure tiers by ASIN count">
+        <div class="cap">Right structure for your catalog</div>
+        <ol>
+          <li><span class="n">1-5</span><span class="t">Waterfall</span></li>
+          <li><span class="n">6-20</span><span class="t">Group + Hero</span></li>
+          <li class="on"><span class="n">21-50</span><span class="t">Split Tier</span></li>
+          <li><span class="n">51-100</span><span class="t">Automate</span></li>
+          <li><span class="n">101-500</span><span class="t">Portfolio</span></li>
+          <li><span class="n">501-1k</span><span class="t">Multi-Ad-Group</span></li>
+          <li><span class="n">1000+</span><span class="t">Capital Allocation</span></li>
+        </ol>
+      </aside>
+    </div>
+  </header>
+
+  <!-- stats -->
+  <div class="stats">
+    <div class="wrap">
+      <div class="stat"><div class="v">5</div><div class="k">audit cadences, daily to pause/scale</div></div>
+      <div class="stat"><div class="v">7</div><div class="k">structure tiers, 1 to 1000+ ASINs</div></div>
+      <div class="stat"><div class="v">4</div><div class="k">phased bulks per restructure plan</div></div>
+      <div class="stat"><div class="v">100%</div><div class="k">local. Your data never leaves.</div></div>
+    </div>
+  </div>
+
+  <!-- tools bento -->
+  <section id="tools">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Every lever of your ad account, one console.</h2>
+        <p>Each tool reads the same Amazon bulk exports you already download. No API keys, no integrations.</p>
+      </div>
+      <div class="bento">
+        <div class="cell c-4 tint-y">
+          <span class="icon">ads_click</span>
+          <h3>PPC Optimization on five cadences</h3>
+          <p>Daily spike watch, weekly bid tweaks and harvest, mid-month negatives, full-month audit, pause/scale calls. Each cadence keeps its own isolated data and its own bulk file out.</p>
+          <div class="chips">
+            <span class="chip">Daily Watch</span><span class="chip">Weekly</span><span class="chip">Mid-Month</span><span class="chip">Full Month</span><span class="chip">Pause/Scale</span>
+          </div>
+        </div>
+        <div class="cell c-2">
+          <span class="icon">support_agent</span>
+          <h3>Tier Recommendations</h3>
+          <p>One upload counts your ASINs, routes you to the right structure tier and scans the account with that tier's thresholds. Problems in, resolutions out.</p>
+        </div>
+        <div class="cell c-2">
+          <span class="icon">waterfall_chart</span>
+          <h3>Waterfall restructure</h3>
+          <p>Full funnel rebuild: Auto to Broad to Phrase to Exact plus ASIN targeting, delivered as four phased bulks in safe dependency order.</p>
+        </div>
+        <div class="cell c-2">
+          <span class="icon">call_split</span>
+          <h3>Cannibalization detector</h3>
+          <p>Finds duplicate targets and search terms that two of your products fight over, then picks the rightful owner by conversion.</p>
+        </div>
+        <div class="cell c-2 tint-g">
+          <span class="icon">account_balance_wallet</span>
+          <h3>Profit P&amp;L</h3>
+          <p>Break-even ACoS per product from your real fees and costs. Know which flags are bleeding money, not just metrics.</p>
+        </div>
+        <div class="cell c-3">
+          <span class="icon">monitoring</span>
+          <h3>Daily sales &amp; PPC tracker</h3>
+          <p>Business report plus ads report, merged by day: rolling averages, buy-box and CVR alerts, a 0-100 account health score.</p>
+        </div>
+        <div class="cell c-3">
+          <span class="icon">travel_explore</span>
+          <h3>Keywords, SEO and listings</h3>
+          <p>Search-query mining, competitor rank tracking, indexed-keyword matrix and listing audits, feeding the same product data as your ads.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- how it works -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Bulk file in, bulk file out.</h2>
+      </div>
+      <div class="flow">
+        <div class="step">
+          <span class="icon">upload_file</span>
+          <h3>Upload</h3>
+          <p>Drop the Sponsored Products bulk export from your Amazon account. Search Term Report included, one file per tool.</p>
+        </div>
+        <div class="step">
+          <span class="icon">fact_check</span>
+          <h3>Review</h3>
+          <p>Flags, bid ladders, harvest candidates, negatives and structure plans. Every action is a checkbox you approve, never an auto-push.</p>
+        </div>
+        <div class="step">
+          <span class="icon">download</span>
+          <h3>Export</h3>
+          <p>Download one Amazon-valid bulk file with your approved changes and re-upload it in Campaign Manager. Done.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- final CTA -->
+  <section class="final">
+    <div class="wrap">
+      <span class="icon lock">lock</span>
+      <h2>Runs on your machine. Answers to no one.</h2>
+      <p>No Amazon API access, no third-party servers, no data sharing. Your account numbers stay in files on your own computer.</p>
+      <div class="ctas">
+        <a class="btn btn-primary btn-lg" href="/login">Log in</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="wordmark" style="font-size:13px"><span class="mark" style="width:22px;height:22px;font-size:13px">P</span>PPC<em>Audit</em> Console</div>
+      <div class="mono">Amazon PPC audit + profit console</div>
+    </div>
+  </footer>
+</body>
+</html>

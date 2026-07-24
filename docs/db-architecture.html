@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PPC Audit — Database Architecture</title>
+<style>
+  :root{
+    --ink:#0b0e11; --panel:#1e2329; --edge:#2b3139; --mute:#707a8a; --body:#eaecef;
+    --primary:#FCD535; --up:#0ecb81; --down:#f6465d; --cyan:#2dbdb6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--body);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.55}
+  code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  a{color:var(--primary)}
+  header{padding:32px 28px 18px;border-bottom:1px solid var(--edge)}
+  header h1{margin:0 0 6px;font-size:22px;letter-spacing:.2px}
+  header .sub{color:var(--mute);font-size:13px}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:18px 18px 8px;margin:22px 0}
+  .card h2{margin:2px 0 4px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .card h2 .tag{font-family:"JetBrains Mono",monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--ink);background:var(--primary);border-radius:5px;padding:2px 7px;font-weight:700}
+  .card p.desc{margin:2px 0 12px;color:var(--mute);font-size:13px;max-width:80ch}
+  .mermaid{background:var(--ink);border:1px solid var(--edge);border-radius:10px;padding:14px;overflow:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 16px;color:var(--mute);font-size:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--edge);display:inline-block}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 18px}
+  .stat{background:var(--ink);border:1px solid var(--edge);border-radius:9px;padding:10px 12px}
+  .stat .n{font-family:"JetBrains Mono",monospace;font-size:20px;font-weight:700;color:var(--primary)}
+  .stat .l{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .note{color:var(--mute);font-size:12.5px;border-left:2px solid var(--primary);padding:4px 0 4px 12px;margin:8px 0 14px}
+  footer{color:var(--mute);font-size:12px;text-align:center;padding:24px;border-top:1px solid var(--edge)}
+  .pill{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--cyan)}
+</style>
+</head>
+<body>
+<header>
+  <h1>PPC Audit + Profit Console — Database System Design</h1>
+  <div class="sub">100% local · FastAPI + SQLAlchemy + SQLite · multi-tenant <b>file-per-tenant</b> isolation
+    (no shared rows between accounts). Generated from <code>backend/app/models.py</code> + <code>backend/app/auth.py</code>.</div>
+</header>
+
+<div class="wrap">
+
+  <div class="stats">
+    <div class="stat"><div class="n">2</div><div class="l">DB engines (auth + pipeline)</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">isolation levels</div></div>
+    <div class="stat"><div class="n">5</div><div class="l">dimension + fact (star)</div></div>
+    <div class="stat"><div class="n">6</div><div class="l">isolated feature tables</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">JSON sidecars (shared)</div></div>
+  </div>
+
+  <!-- 1. ISOLATION MODEL -->
+  <div class="card">
+    <h2><span class="tag">1</span> Multi-tenant isolation — one SQLite file per tenant</h2>
+    <p class="desc">Data is isolated <b>per&nbsp;user → per&nbsp;store → per&nbsp;project (audit) → per&nbsp;Audit&nbsp;Cadence</b>,
+      each as its own physical SQLite file. Campaign IDs from different Amazon accounts can never collide because the
+      files are physically separate. A bulk uploaded under one cadence only ever drives that cadence. The
+      <code>get_db</code> FastAPI dependency folds <span class="pill">?store=&amp;project=&amp;audit_type=</span> into the
+      db path, so every router is auto-scoped with zero per-router code.</p>
+    <div class="legend">
+      <span><i class="sw" style="background:#243042;border-color:#3a4d68"></i> SQLite db file</span>
+      <span><i class="sw" style="background:#2a2418;border-color:#5a4a1f"></i> JSON sidecar (shared across cadences)</span>
+      <span><i class="sw" style="background:#1e2a26;border-color:#2dbdb6"></i> central auth db</span>
+    </div>
+    <pre class="mermaid">
+flowchart LR
+  classDef db fill:#243042,stroke:#3a4d68,color:#eaecef;
+  classDef json fill:#2a2418,stroke:#5a4a1f,color:#eaecef;
+  classDef auth fill:#1e2a26,stroke:#2dbdb6,color:#eaecef;
+  classDef grp fill:#15191e,stroke:#2b3139,color:#707a8a;
+
+  subgraph AUTH["Central Auth · backend/data/auth.db · own engine + Base"]
+    direction TB
+    AU["users"]:::auth
+    AS["sessions"]:::auth
+  end
+
+  ROOT["backend/data/stores/"]:::grp
+
+  subgraph STORE["store dir · namespaced u‹id›__‹store› · per owner user id"]
+    direction TB
+    subgraph PROJ["project = one audit"]
+      direction TB
+      P0["‹project›.db — Full Month / base"]:::db
+      P1["‹project›__daily.db — Daily Watch"]:::db
+      P2["‹project›__weekly.db — Weekly"]:::db
+      P3["‹project›__mid_month.db — Mid-Month"]:::db
+      P4["‹project›__pause_scale.db — Pause / Scale"]:::db
+    end
+    J1["_meta.json · Goal ACoS + econ"]:::json
+    J2["_benchmark.json · store-wide"]:::json
+    J3["_costs.json · store-level"]:::json
+  end
+
+  AUTH -.->|"user id namespaces the dir"| STORE
+  ROOT --> STORE
+  PROJ -. "shared by all cadences (read in any session)" .-> J1
+  PROJ -. shared .-> J2
+  PROJ -. shared .-> J3
+    </pre>
+    <div class="note"><b>full_month</b> and "no cadence" map to the <b>base</b> <code>‹project›.db</code> (back-compat: existing
+      data = the Full-Month set). <b>Monitoring</b> always uses <code>get_base_db</code> (cadence-agnostic). The JSON sidecars
+      (Goal&nbsp;ACoS, Benchmark, Costs) live at store level so you don't re-enter them per cadence — <code>benchmark.cost_map</code>
+      reads <code>_costs.json</code> so <code>profit.compute</code> works in any cadence session with no cross-db join.</div>
+  </div>
+
+  <!-- 2. STAR SCHEMA -->
+  <div class="card">
+    <h2><span class="tag">2</span> PPC Audit star schema (pipeline db)</h2>
+    <p class="desc">Dimensions hold structure (slow-changing); one <code>fact_performance</code> table holds raw metrics
+      stamped with <code>snapshot_date</code> (every upload = a snapshot → enables trends). View is <b>ASIN-rooted</b> at query
+      time (<code>build_tree</code> re-roots campaign→ad-group→ad by the ad's ASIN). Solid lines = real FK (<code>ON DELETE CASCADE</code>);
+      dashed = <b>polymorphic</b> link (<code>fact_performance.entity_type/entity_id</code>, no DB FK). Derived rates
+      (ACoS/CTR/CVR/ROAS) are never stored — computed in <code>metrics.py</code>.</p>
+    <pre class="mermaid">
+erDiagram
+  DIM_CAMPAIGN  ||--o{ DIM_AD_GROUP : "campaign_id"
+  DIM_AD_GROUP  ||--o{ DIM_AD       : "ad_group_id"
+  DIM_AD_GROUP  ||--o{ DIM_TARGET   : "ad_group_id"
+  DIM_PRODUCT   ||--o{ DIM_AD       : "asin"
+  DIM_CAMPAIGN  ||..o{ FACT_PERFORMANCE : "entity=campaign"
+  DIM_AD_GROUP  ||..o{ FACT_PERFORMANCE : "entity=ad_group"
+  DIM_AD        ||..o{ FACT_PERFORMANCE : "entity=ad"
+  DIM_TARGET    ||..o{ FACT_PERFORMANCE : "entity=target"
+
+  DIM_PRODUCT {
+    string asin PK
+    string sku
+    string title
+    float  break_even_acos
+  }
+  DIM_CAMPAIGN {
+    string campaign_id PK
+    string name
+    string targeting_type "auto | manual"
+    string state
+    float  daily_budget
+    string portfolio_id
+  }
+  DIM_AD_GROUP {
+    string ad_group_id PK
+    string campaign_id FK
+    string name
+    float  default_bid
+    string state
+  }
+  DIM_AD {
+    string ad_id PK
+    string ad_group_id FK
+    string asin FK
+    string sku
+    string state
+  }
+  DIM_TARGET {
+    string target_id PK
+    string ad_group_id FK
+    string target_type "keyword | product_target | negative_*"
+    string keyword_text
+    string match_type
+    string expression
+    float  bid
+    string state
+  }
+  FACT_PERFORMANCE {
+    int    perf_id PK
+    string entity_type "campaign|ad_group|ad|target"
+    string entity_id "polymorphic -> dim PKs"
+    date   snapshot_date
+    int    impressions
+    int    clicks
+    float  spend
+    float  sales
+    int    orders
+    int    units
+  }
+    </pre>
+    <div class="note"><b>Account ad cost = Σ Spend of Entity=campaign rows</b> (<code>sales.total_ad</code>), never the ASIN
+      rollup (which double-counts campaigns advertising multiple ASINs). Negatives load as <code>dim_target</code> rows
+      (<code>negative_keyword</code> / <code>negative_product_target</code>), carry no facts, and are excluded from audit/bidopt.</div>
+  </div>
+
+  <!-- 3. SIDE + ISOLATED FEATURE TABLES -->
+  <div class="card">
+    <h2><span class="tag">3</span> Side tables &amp; isolated feature tables (same pipeline db)</h2>
+    <p class="desc">These live in the same per-cadence db but are <b>deliberately separate from the star schema</b> — each
+      runs off its own dedicated upload and never shifts the audit's "latest snapshot". The five cadence panels and the
+      Product Ads tab each keep their <b>own</b> table. Only <code>cadence_run → cadence_task</code> has a real FK; the rest
+      are independent (keyed by ASIN / campaign_id / date / search term).</p>
+    <pre class="mermaid">
+flowchart TB
+  classDef tbl fill:#1e2329,stroke:#2b3139,color:#eaecef;
+  classDef hot fill:#2a2418,stroke:#FCD535,color:#eaecef;
+  classDef grp fill:#15191e,stroke:#2b3139,color:#9aa4b2;
+
+  subgraph SALES["Sales · Profit · Benchmark"]
+    direction TB
+    FS["fact_sales — total vs PPC by ASIN/snapshot"]:::tbl
+    PB["product_benchmark — break-even ACoS / target"]:::tbl
+    PC["product_cost — P&amp;L economics (unused; now _costs.json)"]:::tbl
+    FP["fact_placement — Top/Product/Rest bid adj"]:::tbl
+  end
+  subgraph MON["Monitoring (base db only)"]
+    direction TB
+    FD["fact_daily — 1 row/day, upsert by date"]:::tbl
+    MS["month_sales_override — manual monthly total"]:::tbl
+  end
+  subgraph CAD["Audit Cadence — each its OWN isolated table"]
+    direction TB
+    DW["daily_watch_fact — Daily Watch (per day)"]:::hot
+    WK["weekly_term_fact — Weekly (per week 1..N)"]:::hot
+    MM["mid_month_term_fact — Mid-Month"]:::hot
+    FM["full_month_term_fact — Full Month"]:::hot
+    PS["pause_scale_term_fact — Pause / Scale"]:::hot
+  end
+  subgraph PA["Product Ads"]
+    direction TB
+    PAF["product_ad_fact — own bulk upload (ASIN+SKU+metrics)"]:::hot
+  end
+  subgraph WORK["Research · Audit trail · Cadence runs"]
+    direction TB
+    MK["mined_keyword — SQP + Cerebro, deduped"]:::tbl
+    CL["change_log — every exported action"]:::tbl
+    CI["checklist_item — manual tasks"]:::tbl
+    CR["cadence_run"]:::tbl
+    CT["cadence_task"]:::tbl
+  end
+  CR -->|"FK run_id (CASCADE)"| CT
+    </pre>
+    <div class="note">Yellow = the cadence / Product-Ads tables that are <b>physically separate from FactPerformance</b> so an
+      upload to one feature never moves another's snapshot. The five <code>*_term_fact</code> tables share the same column
+      shape (SP Search Term Report lines with the real Campaign / Ad&nbsp;Group / Keyword / Product&nbsp;Targeting IDs as exact
+      strings); <code>weekly_term_fact</code> adds a <code>week</code> column for its Week 1..N panels.</div>
+  </div>
+
+  <!-- 4. AUTH DB -->
+  <div class="card">
+    <h2><span class="tag">4</span> Central authentication db (separate engine)</h2>
+    <p class="desc"><code>backend/data/auth.db</code> — its own engine + Base, fully separate from the per-store/project
+      pipeline DBs. Stdlib PBKDF2 password hashing (no native dep). Login mints an opaque bearer token with a sliding 12h
+      expiry; <b>one active session per user</b> (a new login revokes prior sessions). Superuser <code>SAdmin</code> seeded on
+      startup. Every data router is gated behind <code>Depends(auth.current_user)</code>.</p>
+    <pre class="mermaid">
+erDiagram
+  USERS ||--o{ SESSIONS : "username (1 active enforced)"
+  USERS {
+    int      id PK
+    string   username UK
+    string   password_hash "pbkdf2_sha256$iters$salt$hash"
+    bool     is_superuser
+    bool     is_active
+    datetime created_at
+  }
+  SESSIONS {
+    string   token PK
+    string   username FK
+    datetime created_at
+    datetime expires_at "sliding 12h"
+    datetime last_seen
+  }
+    </pre>
+  </div>
+
+  <footer>
+    Static diagram — open in any browser. Rendered client-side with
+    <a href="https://mermaid.js.org" target="_blank" rel="noopener">Mermaid</a> (CDN). No build step, no project dependency.
+  </footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    securityLevel: 'loose',
+    themeVariables: {
+      fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+      background: '#0b0e11',
+      primaryColor: '#1e2329',
+      primaryBorderColor: '#2b3139',
+      primaryTextColor: '#eaecef',
+      lineColor: '#707a8a',
+      tertiaryColor: '#15191e',
+      // ER diagram
+      attributeBackgroundColorOdd: '#1a1f24',
+      attributeBackgroundColorEven: '#15191e',
+      // flowchart clusters
+      clusterBkg: '#15191e',
+      clusterBorder: '#2b3139',
+      titleColor: '#FCD535',
+      nodeBorder: '#2b3139',
+      edgeLabelBackground: '#0b0e11',
+    },
+    er: { useMaxWidth: true, entityPadding: 10 },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+  });
+</script>
+</body>
+</html>

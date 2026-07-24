@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+/* render the whole app at 90% so dense tables fit without a horizontal scrollbar */
+html { zoom: 0.9; }
+body { @apply bg-ink text-body font-sans antialiased; margin: 0; }
+
+/* skeleton loading shimmer (see Skeleton/TableSkeleton in ui.jsx) */
+.skeleton { @apply bg-edge/60 rounded relative overflow-hidden; }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  transform: translateX(-100%); animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* Binance is flat color-block — no atmospheric backdrop. Keep the canvas clean. */
+.bg-grid { @apply bg-ink; }
+
+/* elevated card: surface-card on canvas, hairline border, 12px corners, no shadow */
+.card { @apply bg-panel border border-edge rounded-xl; }
+
+/* buttons: 6px radius, weight 600 (BinanceNova / Inter) */
+.btn { @apply px-3 py-2 rounded-md font-sans text-sm font-semibold transition-colors; }
+/* the signature primary: black text on Binance Yellow */
+.btn-primary { @apply bg-primary text-onPrimary hover:bg-primaryActive; }
+/* secondary on dark: hairline outline, yellow on hover */
+.btn-ghost { @apply border border-edge text-body hover:border-primary/60 hover:text-primary; }
+
+.tag { @apply inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-medium; }
+
+/* global button loading state: set aria-busy={true} on any <button> mid-action and
+   it grows an inline spinner (currentColor) + blocks clicks. One rule, every button. */
+@keyframes btnspin { to { transform: rotate(360deg); } }
+button[aria-busy="true"] { position: relative; pointer-events: none; }
+button[aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.85em; height: 0.85em;
+  margin-right: 0.45em;
+  vertical-align: -0.12em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 9999px;
+  animation: btnspin 0.6s linear infinite;
+}
+
+/* keyboard focus ring (info base, 50% alpha) */
+input:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { @apply bg-edge rounded; }
+::-webkit-scrollbar-track { @apply bg-ink; }
+
+/* modal entrance animations (used by Modal.jsx) */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* toast animations (used by Toast.jsx) */
+@keyframes toastIn { from { opacity: 0; transform: translateX(120%); } to { opacity: 1; transform: translateX(0); } }
+@keyframes iconPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes ringPulse { from { transform: scale(.6); opacity: .55; } to { transform: scale(1.9); opacity: 0; } }
+@keyframes toastBar { from { width: 100%; } to { width: 0%; } }
+
+/* ── Sticky table headers ────────────────────────────────────────────────────
+   On mouse/hover devices, every table becomes its own scroll box (≤ 70vh) with a
+   frozen header: scrolling a long table with the wheel keeps its column header
+   pinned to the top of THAT table — never to the page/viewport. The browser
+   scrollbar still scrolls the page normally (the table's wheel scroll chains to the
+   page once it hits its ends). Short tables are untouched (content fits → no inner
+   scrollbar, header just flows). Applies to every table wrapped in its own div
+   (the standard `<div class="overflow-x-auto"><table>…` pattern across the app). */
+@media (hover: hover) and (pointer: fine) {
+  div:has(> table) { max-height: 70vh; overflow: auto; }
+  div:has(> table) > table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    @apply bg-panel;
+  }
+}

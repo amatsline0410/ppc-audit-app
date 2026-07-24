@@ -1,0 +1,28 @@
+__pycache__/
+*.db
+*.db-shm
+*.db-wal
+.venv/
+node_modules/
+dist/
+.env
+
+# User-supplied Amazon exports (real financial data) — never commit.
+uploads/
+Category Listings Report/
+Guide Templates/
+
+# Real bulk/report workbooks kept locally for manual regression checks.
+# Specs (files/*.md) stay tracked; the workbooks never leave this machine.
+files/*.xlsx
+files/*.xlsm
+files/*.csv
+
+# Per-user runtime store data (regenerated on startup) — never commit.
+backend/data/stores/
+backend/data/auth.db
+
+# Ignore loose workbooks in data/, but keep the bundled ZValves seed
+# (backend/data/zvalves_bulk.xlsx) so a fresh clone can seed on first run.
+/backend/data/*.xlsx
+!/backend/data/zvalves_bulk.xlsx

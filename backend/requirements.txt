@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.34
+pydantic==2.9.2
+pandas==2.2.3
+openpyxl==3.1.5
+python-calamine==0.8.2     # fast xlsx reader (Rust) — ~8x openpyxl on big bulks; optional, workbook.py falls back to openpyxl if absent
+python-multipart==0.0.9
+requests==2.32.3
+httpx==0.28.1              # tests only — FastAPI TestClient (HTTP-level isolation tests)
+# optional — only needed if LLM_USE_LANGCHAIN=true
+# langchain-core==0.3.0
