@@ -1508,6 +1508,15 @@ All bid math stays deterministic — the LLM only writes summaries.
 
 ## Changelog
 
+- **2026-07-26 · Startup scripts fixed (both platforms)** — `run.sh` / `run.bat` / `run.ps1`
+  now activate `backend/.venv` themselves when no virtual environment is already active, so
+  launching the app from a plain terminal no longer falls through to the system Python (with
+  none of the dependencies installed). They also stop re-seeding: the "already set up" check
+  looked for `app.db`, a file nothing in the app ever creates, so every single launch re-ran
+  the bundled-sample seed — it now checks `data/auth.db`, which is created once on first run.
+  README gained a Windows quick-start (venv activation, `run.bat` vs `run.ps1`, PowerShell
+  execution-policy note) alongside the Linux/macOS one.
+
 - **2026-07-26 · Windows file-handle fixes (uploads)** — workbook readers now close their
   file handle explicitly (`with pd.ExcelFile(...)`) in the Search Term Report, Product
   Benchmark, keyword-research, and sheet-name paths. On Windows a file that's still open

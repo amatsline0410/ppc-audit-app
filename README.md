@@ -17,16 +17,39 @@ bulk .xlsx ─▶ ingest ─▶ split ─▶ clean ─▶ load(SQLite) ─▶ au
 
 ## Quick start
 
-### 1. Backend
+Runs the same on Linux/macOS and Windows 10/11. Needs Python 3.11+, Node 18+.
+
+### 1. Backend — Linux / macOS
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # tweak TARGET_ACOS / LLM_PROVIDER if you want
+./run.sh                        # copies .env, seeds on first run, serves :8000
+```
 
+### 1. Backend — Windows
+```bat
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+run.bat                         :: or  .\run.ps1  from PowerShell
+```
+
+If PowerShell blocks `run.ps1` ("running scripts is disabled"), either use `run.bat`
+or allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+The run scripts activate `backend/.venv` themselves when no venv is already active,
+so the venv only has to be *created* once — you don't have to activate it every time.
+
+Doing it by hand instead of via the run script:
+```bash
+cp .env.example .env            # Windows: copy .env.example .env
 python -m app.main              # one-time: seed the bundled ZValves bulk file
 uvicorn app.main:app --reload   # serve on http://localhost:8000  (docs at /docs)
 ```
+
+First login: **SAdmin** / **RootPass** (override with `SUPERUSER_NAME` / `SUPERUSER_PASS`).
 
 ### 2. Frontend
 ```bash
