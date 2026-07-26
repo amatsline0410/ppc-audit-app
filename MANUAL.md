@@ -1508,6 +1508,16 @@ All bid math stays deterministic — the LLM only writes summaries.
 
 ## Changelog
 
+- **2026-07-26 · Windows file-handle fixes (uploads)** — workbook readers now close their
+  file handle explicitly (`with pd.ExcelFile(...)`) in the Search Term Report, Product
+  Benchmark, keyword-research, and sheet-name paths. On Windows a file that's still open
+  can't be deleted, so when you uploaded a file the parser rejected, cleaning up the
+  temporary copy failed and the clear "couldn't read that file" message was replaced by a
+  server error. You now get the real message. The main bulk upload (`POST /upload`) also
+  deletes its temporary copy when it finishes — previously every bulk upload left a full
+  copy of the workbook behind in the system temp folder. No change to what you upload or
+  to results; Linux/Mac behavior is unchanged.
+
 - **2026-07-25 · Windows 11 compatibility** — store-level JSON files (benchmark,
   catalog, COGS, FBA fees, transactions, audit meta) are now read and written with an
   explicit `utf-8` encoding (`ensure_ascii=False` on writes). Fixes garbled text /

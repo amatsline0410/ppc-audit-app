@@ -56,7 +56,9 @@ def sheet_names(path: str) -> list[str]:
     key = stamp(path)
     hit = _SHEETS.get(key)
     if hit is None:
-        hit = _SHEETS[key] = list(pd.ExcelFile(path, engine=_XLSX_ENGINE).sheet_names)
+        # closed explicitly — Windows can't unlink a file still held open.
+        with pd.ExcelFile(path, engine=_XLSX_ENGINE) as xls:
+            hit = _SHEETS[key] = list(xls.sheet_names)
     return list(hit)
 
 

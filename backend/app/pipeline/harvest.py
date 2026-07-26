@@ -116,17 +116,19 @@ def parse_str(path: str, sheet: Optional[str] = None) -> pd.DataFrame:
         df = pd.read_csv(path)
     else:
         from . import workbook
-        xls = pd.ExcelFile(path, engine=workbook.excel_engine())
-        # pick the STR sheet: explicit, else first sheet carrying a search-term column
-        target_sheet = sheet
-        if target_sheet is None:
-            for sn in xls.sheet_names:
-                head = pd.read_excel(xls, sheet_name=sn, nrows=0)
-                if any("search term" in str(c).strip().lower() for c in head.columns):
-                    target_sheet = sn
-                    break
-            target_sheet = target_sheet or xls.sheet_names[0]
-        df = pd.read_excel(xls, sheet_name=target_sheet)
+        # close the handle before returning: Windows can't unlink a file the
+        # process still holds open, and callers unlink the temp upload after us.
+        with pd.ExcelFile(path, engine=workbook.excel_engine()) as xls:
+            # pick the STR sheet: explicit, else first sheet carrying a search-term column
+            target_sheet = sheet
+            if target_sheet is None:
+                for sn in xls.sheet_names:
+                    head = pd.read_excel(xls, sheet_name=sn, nrows=0)
+                    if any("search term" in str(c).strip().lower() for c in head.columns):
+                        target_sheet = sn
+                        break
+                target_sheet = target_sheet or xls.sheet_names[0]
+            df = pd.read_excel(xls, sheet_name=target_sheet)
     cols = _resolve_columns(df)
     if not cols.get("search_term"):
         raise ValueError("file has no 'Customer Search Term' column — is this a Search Term Report?")

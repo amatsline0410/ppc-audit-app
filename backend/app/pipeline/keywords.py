@@ -74,12 +74,14 @@ def _read(path: str) -> pd.DataFrame:
     if path.lower().endswith(".csv"):
         return pd.read_csv(path, skiprows=_csv_header_idx(path), encoding="utf-8-sig")
     from . import workbook
-    xls = pd.ExcelFile(path, engine=workbook.excel_engine())
-    for sn in xls.sheet_names:
-        raw = pd.read_excel(xls, sheet_name=sn, header=None, nrows=20, dtype=str)
-        if _header_row(raw) is not None:
-            return _promote(pd.read_excel(xls, sheet_name=sn, header=None, dtype=str))
-    return pd.read_excel(xls, sheet_name=xls.sheet_names[0])
+    # close the handle before returning: Windows can't unlink a file the
+    # process still holds open, and callers unlink the temp upload after us.
+    with pd.ExcelFile(path, engine=workbook.excel_engine()) as xls:
+        for sn in xls.sheet_names:
+            raw = pd.read_excel(xls, sheet_name=sn, header=None, nrows=20, dtype=str)
+            if _header_row(raw) is not None:
+                return _promote(pd.read_excel(xls, sheet_name=sn, header=None, dtype=str))
+        return pd.read_excel(xls, sheet_name=xls.sheet_names[0])
 
 
 def _find(df: pd.DataFrame, *preds) -> Optional[str]:

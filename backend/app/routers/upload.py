@@ -1,5 +1,6 @@
 """POST /upload : run stages 1-5, return summary. target_acos overridable."""
 from __future__ import annotations
+import os
 import tempfile
 from datetime import date, datetime
 from fastapi import APIRouter, UploadFile, File, Depends, Query, HTTPException
@@ -28,31 +29,40 @@ async def upload(
         tmp.write(await file.read())
         path = tmp.name
 
+    # The temp upload is read twice below (bulk + optional STR sheet), so it can
+    # only be removed once both are done — hence one finally around the whole body.
     try:
-        df = ingest.ingest(path)
-        frames = clean.clean(ingest.split(df))
-        counts = load.load(db, frames, snap)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(400, f"Couldn't read that file — make sure it's a valid Amazon SP bulk export (.xlsx/.csv). ({type(e).__name__})")
+        try:
+            df = ingest.ingest(path)
+            frames = clean.clean(ingest.split(df))
+            counts = load.load(db, frames, snap)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Couldn't read that file — make sure it's a valid Amazon SP bulk export (.xlsx/.csv). ({type(e).__name__})")
 
-    th = default_thresholds.merged(target_acos=target_acos)
-    flags = audit.audit(db, th, snapshot=snap)
-    tree = audit.build_tree(db, snapshot=snap)
+        th = default_thresholds.merged(target_acos=target_acos)
+        flags = audit.audit(db, th, snapshot=snap)
+        tree = audit.build_tree(db, snapshot=snap)
 
-    # OPTIONAL: many SP bulk exports carry an 'SP Search Term Report' sheet.
-    # If present, harvest it through the normal STR process; if absent, skip.
-    str_found, candidates = False, []
-    try:
-        str_df = harvest_stage.parse_str(path)
-        if len(str_df):
-            str_found = True
-            candidates = [c.dict() for c in harvest_stage.harvest(db, str_df, th)]
-    except ValueError:
-        pass   # no search-term sheet in this bulk -> process bulk only
+        # OPTIONAL: many SP bulk exports carry an 'SP Search Term Report' sheet.
+        # If present, harvest it through the normal STR process; if absent, skip.
+        str_found, candidates = False, []
+        try:
+            str_df = harvest_stage.parse_str(path)
+            if len(str_df):
+                str_found = True
+                candidates = [c.dict() for c in harvest_stage.harvest(db, str_df, th)]
+        except ValueError:
+            pass   # no search-term sheet in this bulk -> process bulk only
 
-    return UploadSummary(snapshot_date=snap.isoformat(),
-                         entity_counts={k: v for k, v in counts.items() if isinstance(v, int)},
-                         asins=len(tree), flags=len(flags),
-                         str_found=str_found, harvest_candidates=candidates)
+        return UploadSummary(snapshot_date=snap.isoformat(),
+                             entity_counts={k: v for k, v in counts.items() if isinstance(v, int)},
+                             asins=len(tree), flags=len(flags),
+                             str_found=str_found, harvest_candidates=candidates)
+    finally:
+        # best-effort: a leftover temp file is not worth failing the request over
+        try:
+            os.unlink(path)
+        except OSError:
+            pass

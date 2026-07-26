@@ -87,16 +87,18 @@ def parse_benchmark(path: str, sheet: Optional[str] = None) -> pd.DataFrame:
         df = pd.read_csv(path)
     else:
         from . import workbook
-        xls = pd.ExcelFile(path, engine=workbook.excel_engine())
-        target = sheet
-        if target is None:
-            for sn in xls.sheet_names:
-                head = pd.read_excel(xls, sheet_name=sn, nrows=0)
-                if any("asin" in str(c).strip().lower() for c in head.columns):
-                    target = sn
-                    break
-            target = target or xls.sheet_names[0]
-        df = pd.read_excel(xls, sheet_name=target)
+        # close the handle before returning: Windows can't unlink a file the
+        # process still holds open, and callers unlink the temp upload after us.
+        with pd.ExcelFile(path, engine=workbook.excel_engine()) as xls:
+            target = sheet
+            if target is None:
+                for sn in xls.sheet_names:
+                    head = pd.read_excel(xls, sheet_name=sn, nrows=0)
+                    if any("asin" in str(c).strip().lower() for c in head.columns):
+                        target = sn
+                        break
+                target = target or xls.sheet_names[0]
+            df = pd.read_excel(xls, sheet_name=target)
     col = _resolve(df)
     if not col["asin"] or not (col["be_acos"] or col["be_roas"] or col["price"]):
         raise ValueError("Benchmark file needs ASIN + break-even ACoS/ROAS (or sale price)")
