@@ -6,6 +6,7 @@ GET  /product-ads        : consolidated per-Product-Ad metrics + account total.
 GET  /product-ads/detail : ads + per-campaign rollups for the selected ASIN(s).
 """
 from __future__ import annotations
+import os
 import tempfile
 from fastapi import APIRouter, UploadFile, File, Depends, Query, HTTPException, Response
 from sqlalchemy.orm import Session
@@ -37,6 +38,11 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db)) ->
     except Exception as e:
         raise HTTPException(400, "Couldn't read that file — make sure it's a valid Amazon SP bulk "
                                  f"export with Product Ads. ({type(e).__name__})")
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
     out["upload_meta"] = cadence_stage.set_upload_meta(db, file.filename or "bulk.xlsx",
                                                        out.get("product_ads", 0),
                                                        feature="product_ads")

@@ -11,7 +11,7 @@ from .database import (init_db, get_session, ensure_store, ensure_project,
                        DEFAULT_STORE, DEFAULT_PROJECT)
 from . import auth
 from .routers import (upload, audit, consult, automate, harvest, stores, insights, sales, costs, bids,
-                      templates, keywords, productads, monitoring, cadence, dailywatch, weekly,
+                      templates, keywords, productads, adsstudio, monitoring, cadence, dailywatch, weekly,
                       midmonth, fullmonth, pausescale, waterfall, cannibal,
                       channels, tracker, catalog, auth as auth_router)
 
@@ -48,6 +48,7 @@ app.include_router(bids.router, tags=["bids"], dependencies=_PROTECTED)
 app.include_router(templates.router, tags=["templates"], dependencies=_PROTECTED)
 app.include_router(keywords.router, tags=["keywords"], dependencies=_PROTECTED)
 app.include_router(productads.router, tags=["productads"], dependencies=_PROTECTED)
+app.include_router(adsstudio.router, tags=["adsstudio"], dependencies=_PROTECTED)
 app.include_router(monitoring.router, tags=["monitoring"], dependencies=_PROTECTED)
 app.include_router(cadence.router, tags=["cadence"], dependencies=_PROTECTED)
 app.include_router(dailywatch.router, tags=["dailywatch"], dependencies=_PROTECTED)

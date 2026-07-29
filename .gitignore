@@ -26,3 +26,6 @@ backend/data/auth.db
 # (backend/data/zvalves_bulk.xlsx) so a fresh clone can seed on first run.
 /backend/data/*.xlsx
 !/backend/data/zvalves_bulk.xlsx
+
+# Loose Amazon exports used for manual checks — never commit.
+mdfiles/

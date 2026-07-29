@@ -132,6 +132,61 @@ def from_pausescale(scale_rows, pause_rows, campaign_rows) -> list[dict]:
     return out
 
 
+def from_adsstudio(migrate, pause_targets, campaign_pauses) -> list[dict]:
+    """Ads Studio consolidation bulk: targets migrated into the destination campaign,
+    targets paused for missing the goal ACoS, drained source campaigns paused."""
+    out = []
+    for m in migrate or []:
+        out.append(dict(campaign_id=m.get("to_campaign_id"), entity_type=m.get("entity"),
+                        entity_id=m.get("id"), label=m.get("label"), field="create",
+                        old_value=m.get("from_campaign_name"), new_value=str(m.get("new_bid")),
+                        action="consolidate", reason=m.get("reason")))
+    for p in pause_targets or []:
+        out.append(dict(campaign_id=p.get("campaign_id"), entity_type=p.get("entity"),
+                        entity_id=p.get("id"), label=p.get("label"), field="state",
+                        old_value="enabled", new_value="paused", action="pause",
+                        reason=p.get("reason")))
+    for c in campaign_pauses or []:
+        out.append(dict(campaign_id=c.get("campaign_id"), entity_type="campaign",
+                        label=c.get("campaign_name"), field="state", old_value="enabled",
+                        new_value="paused", action="pause",
+                        reason="consolidated into the destination campaign"))
+    return out
+
+
+def from_funnel(promotes, migrates, negatives, pauses, placements) -> list[dict]:
+    """Ads Studio funnel bulk: promotions into the money tier, same-tier moves, the
+    sculpting negatives left behind, pauses, and Top-of-Search uplifts."""
+    out = []
+    for m in promotes or []:
+        out.append(dict(campaign_id=m.get("to_campaign_id"), entity_type=m.get("entity"),
+                        entity_id=m.get("id"), label=m.get("label"), field="create",
+                        old_value=f"{m.get('from_tier')} · {m.get('from_campaign_name')}",
+                        new_value=f"{m.get('to_tier')} @ {m.get('new_bid')}",
+                        action="promote", reason=m.get("reason")))
+    for m in migrates or []:
+        out.append(dict(campaign_id=m.get("to_campaign_id"), entity_type=m.get("entity"),
+                        entity_id=m.get("id"), label=m.get("label"), field="create",
+                        old_value=m.get("from_campaign_name"),
+                        new_value=f"{m.get('to_tier')} @ {m.get('new_bid')}",
+                        action="consolidate", reason=m.get("reason")))
+    for n in negatives or []:
+        out.append(dict(campaign_id=n.get("campaign_id"), entity_type="negative",
+                        label=n.get("label"), field="create", old_value=None,
+                        new_value="negative exact", action="negate", reason=n.get("reason")))
+    for p in pauses or []:
+        out.append(dict(campaign_id=p.get("campaign_id"), entity_type=p.get("entity"),
+                        entity_id=p.get("id"), label=p.get("label"), field="state",
+                        old_value="enabled", new_value="paused", action="pause",
+                        reason=p.get("reason")))
+    for p in placements or []:
+        out.append(dict(campaign_id=p.get("campaign_id"), entity_type="placement",
+                        label=p.get("campaign_name"), field="percentage",
+                        old_value=str(p.get("current_pct")), new_value=str(p.get("new_pct")),
+                        action="placement", reason=p.get("reason")))
+    return out
+
+
 def from_harvest(rows: list[dict]) -> list[dict]:
     out = []
     for r in rows:

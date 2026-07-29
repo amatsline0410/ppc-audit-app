@@ -294,6 +294,197 @@ sales · orders · ACOS), and its **per-campaign rollups** (spend · sales · or
 ROAS) — all from Product Ads' own data (no audit flags / strategy, since this is a separate
 model). Endpoint: `GET /product-ads/detail?asins=A,B,C`.
 
+### Ads Studio (consolidate campaigns into a boss campaign)
+Its own sidebar tab under **PPC Suite**, with its **own bulk upload** and its **own
+Target ACoS** — nothing it does depends on, or disturbs, the Product Ads tab.
+
+**1 · Upload.** Click **Upload Sponsored Products Bulk** and pick a Sponsored Products
+bulk export. Studio parses two things out of it into its own tables: the **Product Ad**
+rows (which ASINs run where) and the **Keyword / Product Targeting** rows with their
+metrics (what consolidation is judged on). Re-uploading replaces both. Export the bulk
+*with* its keyword and targeting rows — without them Studio can show products but can't
+judge anything, and it says so. **Clear** wipes Studio's snapshot only.
+
+**2 · Consolidation settings.** Three choices drive everything:
+
+- **Campaign type** — **Automatic** and/or **Manual (KW + PT)**. Only campaigns of the
+  chosen kinds load into the board. Manual covers both keyword- and product-targeting
+  campaigns.
+- **Target ACoS** — Ads Studio's own goal, in percent, saved per audit. This is the number
+  that decides which targets survive the merge. It is **deliberately separate** from the
+  audit-wide Goal ACoS knob, so tuning consolidation never shifts your flags or bid plans.
+- **Products** — tick one ASIN for a single-product consolidation, or several to merge
+  across products. The product table is the same one the Product Ads tab shows (status,
+  campaigns by kind, spend, sales, orders, ACoS), rendered off Studio's own upload.
+
+Then **Open consolidation board**.
+
+**3 · The board.** Campaigns start in the **unassigned** column on the left, split into one
+collapsible box per targeting kind — **automatic**, **keyword target**, **product target**,
+**manual** — each showing its campaign count, total spend and total keep-count. Drag a card
+into a group on the right to merge it, or back into any box to pull it out. Each group has
+one **BOSS** campaign — the parent everything is consolidated into — marked with a yellow
+badge; click **set as boss** on any card to change it. Groups are seeded for you: one per
+targeting kind that has more than one campaign, holding just that kind's highest-spend
+campaign as the boss, so merging is always something you chose. Add your own with **Add
+group** and rename it by typing in its title. Every card shows the **campaign name**, its
+ID, its **ad group name(s)**, spend · sales · ACoS and a **keep / drop / review** count;
+**targets** opens the full list for that campaign, with the ad group each target sits in.
+
+**4 · What decides a target's fate — your Target ACoS.** Every keyword and product target
+is judged against the goal you set in step 2:
+
+| Verdict | Rule | What the plan does |
+|---|---|---|
+| **keep** | 1+ orders **and** ACoS at or under goal | moved into the boss campaign |
+| **drop** | 1+ orders but ACoS over goal, **or** 0 orders with enough clicks to judge | paused where it currently sits |
+| **review** | 0 orders and too few clicks to judge | left completely alone |
+
+So consolidating doesn't just move campaigns together — the boss campaign inherits **only
+the targets that are actually paying for themselves**, and the ones that aren't get
+switched off rather than carried along.
+
+**5 · Draft plan** turns the board into four lists per group:
+
+- **move into the boss campaign** — winning targets created in the boss, each with the bid
+  it will open at (its existing bid, or a goal-ACoS bid when it has none). Pre-selected.
+- **pause** — losing targets, paused by ID. Includes losers already sitting *in* the boss
+  campaign. Pre-selected.
+- **pause source campaigns** — the drained campaigns. **Never pre-selected**, and ticking
+  any of them triggers a confirmation: pausing a campaign stops its sales the moment Amazon
+  processes the file, so only include these once the moved targets have picked up delivery
+  in the boss campaign.
+- **can't move** — winners that must stay put, each with the reason. Most often an
+  **auto-campaign clause** (`close-match` / `loose-match` / `substitutes` / `complements`,
+  which Amazon won't let you create in a manual campaign), a keyword whose text Amazon
+  would reject, or a target the boss campaign already has.
+
+**6 · Consolidated campaigns** (bottom of the page) shows what each boss campaign looks
+like once the plan is applied: the products it covers, tagged **single product** or **N
+products**; how many campaigns it absorbed; its target count and how many moved in; the
+spend the plan switches off; and the spend / sales / orders / ACoS / ROAS of the targets
+that survive. Those metrics are the **trailing numbers of the surviving targets** — what
+the campaign would have done had it been consolidated all along. They are not a forecast.
+
+**Export bulk** downloads the ticked rows as one Amazon Sponsored Products bulk
+(`ads_studio_consolidation.xlsx`) — creates ordered before pauses, IDs written as exact
+strings, de-duplicated so Amazon can't reject on *Duplicate Id* / *Duplicate Keyword Text*.
+Re-upload it to Amazon like any other file this app produces; every row is recorded in the
+**Change Log** under source `ads_studio`. Nothing is sent to Amazon by the app itself, and
+nothing changes in your account until you upload that file.
+
+#### Performance tiers (HERO / A / B / C / D)
+Every product and every campaign in Ads Studio is ranked into a performance tier, so you
+can work on your heroes without reading a hundred-row table. The **Performance tier** row
+in the settings block filters the product table; the tier you pick also carries into the
+consolidation board, and each campaign card shows its own tier badge.
+
+**How the ranking works.** There are no labels to learn from, so this is unsupervised. Each
+row gets a 0–1 score blending three things:
+
+| Component | Weight | What it measures |
+|---|---|---|
+| **Volume** | 45% | Share of the selection's ad sales, log-compressed so one whale doesn't flatten everything below it into a single tier |
+| **Efficiency** | 35% | Goal attainment — 1.0 at half your Target ACoS, ~0.33 exactly at goal, 0 at twice it |
+| **Conviction** | 20% | Empirical-Bayes shrunk conversion rate, using the posterior's **lower** credible bound — so one order on one click can't outrank 400 clicks of real evidence |
+
+The scores are then clustered with **1-D k-means** to find the natural breaks between
+tiers, so the cut points follow your account's own gaps rather than an arbitrary
+percentile. A portfolio of twelve equally good campaigns doesn't get a bottom tier invented
+for it.
+
+**Honest degradation**, the same rule the rest of the app's models follow:
+
+- fewer than 8 earning rows → falls back to score-ranked quantiles, labelled *ranked (too
+  few to cluster)* rather than pretending it clustered
+- nothing sold anything → no ranking at all; every row reads Tier D with "no ad sales in
+  this bulk"
+- a campaign or product with **spend but zero sales** is always Tier D, whatever it spent —
+  it cannot be ranked on return, only on how much it burned
+
+**Deterministic.** Centroids are seeded from quantiles, never at random, and no model is
+persisted. The same bulk always produces the same tiers.
+
+**Relative, not absolute.** Tiers rank rows against *each other* within the current upload,
+and against *your* Target ACoS — change the goal and the tiers re-rank. Filtering is always
+applied **after** tiering, so hiding your heroes can never promote a Tier B campaign into
+their place.
+
+#### Funnel strategy (the segmented funnel)
+The second way into Ads Studio. Pick your products, then hit **Funnel strategy** instead of
+the consolidation board. Where the board merges campaigns you choose, the funnel asks a
+different question: **is this account shaped like a funnel at all, and is every winning
+term sitting in the right tier?**
+
+The shape it checks for:
+
+| Phase | Tier | Job |
+|---|---|---|
+| 1 · Discovery | **Auto** | Let Amazon find new search terms and competitor ASINs. Should hold **15–20% of spend**. |
+| 1 · Discovery | **Broad** | Capture wide search variations on tightly themed keyword groups. |
+| 1 · Discovery | **Phrase** | The middle of the funnel — variations with word order intact. |
+| 2 · Performance | **Exact** | Proven converters only. Highest bids, primary budget. |
+| 2 · Performance | **Product targeting** | Competitor detail pages — substitutes and complements. |
+| 3 · Defense | Sponsored Brands / Display | Brand defense and retargeting. |
+
+**Phase 3 is reported, not built.** This app can read SB and SD in the **Channels** tab but
+has no SB/SD bulk writer, so the funnel lists it as a gap for you to set up in Amazon's
+console rather than pretending to fix it.
+
+**The funnel row** shows each tier as a card: how many campaigns sit in it, its spend
+(and share of the total), sales, ACoS and orders. A tier with no campaigns is drawn dashed
+and marked **missing tier**. A campaign's tier is decided by **where most of its spend
+sits**, so one stray exact keyword can't reclassify a broad research campaign.
+
+**Phase 1 budget bar** draws the 15–20% band to scale with your actual auto-discovery share
+marked on it, and says plainly whether you're under (mining too little), inside, or over
+(hoarding budget in discovery that Exact should be carrying).
+
+**Funnel gaps** lists every missing tier with why it costs you. **Mixed match types** lists
+any campaign holding more than one match type — the rule is never to mix them, because a
+shared budget pool destroys bid control and muddies the data. Auto campaigns are exempt:
+their clause rows are Amazon's own match groups, not a structural mistake.
+
+**Route winners** then does the funnel's central move. Every target is judged against your
+Ads Studio Target ACoS, and each **keep** is sent where the funnel says it belongs:
+
+- a winner in **Auto / Broad / Phrase** is **promoted** into your chosen Exact campaign, as
+  an **Exact** keyword — that's the graduation the whole structure exists for. A winning
+  ASIN term goes to the Product Targeting campaign instead.
+- every promotion leaves a **negative exact upstream**, in the campaign it came from. This
+  is the part people skip: without it the discovery campaign keeps bidding on the same
+  term, you pay twice, and the funnel stops flowing one way. Ad-group level where possible,
+  campaign level when there's no ad group to hang it on.
+- a winner already in **Exact / PT** but in the wrong campaign is **consolidated** into the
+  tier's chosen campaign.
+- **drop** verdicts are paused where they sit. **review** verdicts are left alone.
+- anything that can't move is listed under **can't move** with the reason.
+
+Pick which campaign owns each receiving tier from the dropdown on the **Exact** and
+**Product targeting** cards (defaults to the highest-spend campaign in that tier).
+
+**Top of search uplift** applies the placement rule: once an Exact campaign's conversion is
+stable — at least 5 orders at or under your goal ACoS — its Top-of-Search multiplier is
+raised by **20–50%**, scaled by how far under goal it is (right at goal gets +20%,
+comfortably under gets +50%, capped at Amazon's 900% ceiling). The current percentage is
+read from the bulk's own `Bidding Adjustment` rows. These are **not pre-selected** — a
+placement multiplier changes what you pay on every click in the campaign.
+
+**Export funnel bulk** writes one file: creates first (so the money tier owns the term),
+then the upstream negatives, then the pauses, plus a separate **Placement Adjustments**
+sheet when you ticked any. If you export promotions **without** their matching negatives,
+you get a warning first — that combination is the one that quietly doubles your spend.
+Every row lands in the **Change Log** under source `ads_studio`.
+
+Endpoints: `GET /ads-studio/funnel?asins=A,B,C`, `POST /ads-studio/funnel/plan`,
+`POST /ads-studio/funnel/bulk`.
+
+Endpoints: `POST /ads-studio/upload`, `GET /ads-studio/products`,
+`GET|POST /ads-studio/settings`, `DELETE /ads-studio/data`,
+`GET /ads-studio/board?asins=A,B,C&campaign_types=auto,manual`, `POST /ads-studio/plan`,
+`POST /ads-studio/bulk`.
+
+
 ### Tier Recommendations (right structure for your ASIN count)
 First tab of the sidebar's **Consultation** group (same level as PPC Suite; also
 holds Waterfall — the account structure tools). Goal: the
@@ -1507,6 +1698,75 @@ All bid math stays deterministic — the LLM only writes summaries.
 ---
 
 ## Changelog
+
+- **2026-07-27 · Performance tiers in Ads Studio (HERO / A / B / C / D)** — products and
+  campaigns are now ranked into performance tiers you can filter by. The score blends sales
+  volume (log-compressed), ACoS against your Target ACoS, and an empirical-Bayes shrunk
+  conversion rate — using the posterior's lower credible bound, so a 1-click "100% CVR"
+  can't outrank real evidence. Scores are clustered with **1-D k-means** so the tier breaks
+  follow your account's own gaps instead of fixed percentiles. Degrades honestly: too few
+  rows falls back to ranked quantiles and says so, a selection with no sales returns no
+  ranking, and anything with spend but zero sales is always bottom tier. Deterministic —
+  quantile-seeded, no RNG, no persisted model, so the same bulk always tiers the same way.
+  Implemented in NumPy against the existing `ml.py` (no scikit-learn / scipy added — this
+  app deliberately keeps its dependency set small and offline).
+
+- **2026-07-27 · Funnel strategy in Ads Studio** — a second way into Ads Studio that
+  applies the segmented funnel: **Auto / Broad / Phrase** discovery feeding **Exact /
+  Product Targeting** performance. It reports the shape of your account (per-tier spend,
+  sales and ACoS; missing tiers; the **15–20% auto-discovery budget band** drawn to scale)
+  and flags every campaign that **mixes match types**, which destroys bid control. **Route
+  winners** then promotes each converting term out of discovery into your chosen Exact
+  campaign as an Exact keyword — winning ASIN terms go to Product Targeting — and leaves a
+  **negative exact upstream** so the discovery campaign stops paying for a term the money
+  tier now owns. Losers pause, thin data is left alone, and anything that can't move is
+  listed with the reason. Adds the **Top of Search** rule: proven Exact campaigns (5+
+  orders at or under goal) get a **+20–50%** placement uplift, scaled by headroom and read
+  from the bulk's own Bidding Adjustment rows. Exports one bulk (creates → negatives →
+  pauses, plus a Placement Adjustments sheet), and warns if you export a promotion without
+  its negative. **Phase 3 (Sponsored Brands / Display) is reported as a gap, not built** —
+  this app has no SB/SD bulk writer.
+
+- **2026-07-27 · Ads Studio is now its own tab, with its own upload and its own Target
+  ACoS** — Ads Studio moved out of the Product Ads tab into its own entry under **PPC
+  Suite**. It has its **own bulk upload** feeding its **own tables**, so it neither reads
+  nor disturbs Product Ads (upload once per panel; clearing one leaves the other intact).
+  The panel runs the whole flow end to end: upload → choose **Automatic** and/or **Manual
+  (KW + PT)** campaigns → set a **Target ACoS that applies to this feature only** (saved
+  per audit, never touches the audit-wide goal) → tick one product or several → open the
+  consolidation board. The destination campaign is now called the **BOSS** campaign. A new
+  **Consolidated campaigns** section at the bottom shows what each boss campaign holds once
+  the plan is applied: products covered (tagged single- or multi-product), campaigns
+  absorbed, targets moved in, spend switched off, and the spend / sales / orders / ACoS /
+  ROAS of the surviving targets.
+
+- **2026-07-27 · Campaign / ad group names now show everywhere (bug fix)** — Product Ads and
+  Ads Studio were displaying raw campaign and ad-group **IDs** instead of names, which made
+  auditing by eye almost impossible. Cause: a real Amazon bulk fills the plain **Campaign
+  Name** column only on *Campaign* rows and **Ad Group Name** only on *Ad Group* rows — both
+  are blank on the Product Ad, Keyword and Product Targeting rows the app reads. The parsers
+  now prefer the **"(Informational only)"** name columns, which Amazon populates on every
+  row, and fall back to the names on the bulk's own Campaign / Ad Group rows for exports that
+  lack them. Ads Studio cards show the campaign name, its ID underneath, and the ad group
+  name(s); the target, migrate and pause tables gained an **Ad group** column. **Names are
+  read at upload time**, so a snapshot ingested before this release still holds IDs —
+  **re-upload the bulk on the Product Ads tab** to pull the names in. Ads Studio shows an
+  amber banner counting how many campaigns are still nameless so you know to do it. Where a
+  bulk genuinely carries no name, the card reads `campaign <id>` in grey rather than
+  pretending the ID is a name.
+
+- **2026-07-27 · Ads Studio (campaign consolidation board)** — select products on the
+  **Product Ads** tab and hit **◫ ads studio** to merge the campaigns behind them. Drag
+  campaign cards into consolidation groups, pick the destination campaign each group merges
+  into, and draft a plan: targets that beat your **Goal ACoS** migrate into the destination,
+  targets that miss it are paused where they sit, and thin-data targets are left alone.
+  Drained source campaigns are offered for pause but never pre-selected (pausing one stops
+  its sales immediately). Auto-campaign clauses, illegal keyword text, and targets the
+  destination already has are reported as "can't move" with the reason rather than silently
+  dropped. Exports one Amazon SP bulk (creates before pauses, exact IDs, de-duplicated) and
+  logs every row to the Change Log. No new upload: Ads Studio reads the Keyword / Product
+  Targeting rows of the **same bulk you already give Product Ads** — re-upload that bulk
+  once if it predates this release.
 
 - **2026-07-26 · Startup scripts fixed (both platforms)** — `run.sh` / `run.bat` / `run.ps1`
   now activate `backend/.venv` themselves when no virtual environment is already active, so

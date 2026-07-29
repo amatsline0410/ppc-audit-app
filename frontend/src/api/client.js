@@ -183,6 +183,43 @@ export const api = {
   productAdsDetail: (asins) =>
     j(`/product-ads/detail?${q({ asins: (asins || []).join(',') })}`),
 
+  // Ads Studio — standalone consolidation panel with its OWN bulk upload + own goal ACoS
+  studioUpload: (file) => {
+    const fd = new FormData(); fd.append('file', file)
+    return j(`/ads-studio/upload?${q()}`, { method: 'POST', body: fd })
+  },
+  studioProducts: () => j(`/ads-studio/products?${q()}`),
+  studioClear: () => j(`/ads-studio/data?${q()}`, { method: 'DELETE' }),
+  studioSetSettings: (targetAcos) =>
+    j(`/ads-studio/settings?${q()}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_acos: targetAcos }) }),
+  studioBoard: (asins, targetAcos, campaignTypes, tiers) =>
+    j(`/ads-studio/board?${q({ asins: (asins || []).join(','), target_acos: targetAcos, campaign_types: (campaignTypes || []).join(','), tiers: (tiers || []).join(',') })}`),
+  studioPlan: (groups, targetAcos) =>
+    j(`/ads-studio/plan?${q({ target_acos: targetAcos })}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groups }) }),
+  // the segmented funnel: Auto/Broad/Phrase discovery -> Exact/PT performance
+  studioFunnel: (asins, targetAcos, campaignTypes) =>
+    j(`/ads-studio/funnel?${q({ asins: (asins || []).join(','), target_acos: targetAcos, campaign_types: (campaignTypes || []).join(',') })}`),
+  studioFunnelPlan: (asins, bosses, campaignTypes, targetAcos) =>
+    j(`/ads-studio/funnel/plan?${q({ target_acos: targetAcos })}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asins, bosses, campaign_types: campaignTypes || [] }) }),
+  studioFunnelBulk: async (payload) => {
+    const r = await authFetch(`${BASE}/ads-studio/funnel/bulk?${q()}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.blob()
+  },
+  studioBulk: async (payload) => {
+    const r = await authFetch(`${BASE}/ads-studio/bulk?${q()}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.blob()
+  },
+
   narrate: (payload) =>
     j('/narrate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
 

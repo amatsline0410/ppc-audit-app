@@ -323,6 +323,89 @@ class ProductAdFact(Base):
     __table_args__ = (Index("ix_paf_asin", "asin"),)
 
 
+class AdsStudioAdFact(Base):
+    """Ads Studio's Product Ad rows — same shape as `ProductAdFact`, own table.
+
+    Ads Studio is a standalone panel with its **own** bulk upload, so it must not
+    read (or be invalidated by) whatever the Product Ads tab happens to hold. Both
+    tables are filled by their own upload and are free to hold different snapshots.
+    """
+    __tablename__ = "ads_studio_ad_fact"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ad_id = Column(String, nullable=True)
+    asin = Column(String, nullable=True, index=True)
+    sku = Column(String, nullable=True)
+    campaign_id = Column(String, nullable=True)
+    campaign_name = Column(String, nullable=True)
+    ad_group_id = Column(String, nullable=True)
+    ad_group_name = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    campaign_type = Column(String, nullable=True)
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    spend = Column(Float, default=0.0)
+    sales = Column(Float, default=0.0)
+    orders = Column(Integer, default=0)
+    units = Column(Integer, default=0)
+    __table_args__ = (Index("ix_asaf_asin", "asin"),)
+
+
+class AdsStudioPlacementFact(Base):
+    """The bulk's `Bidding Adjustment` rows — one per (campaign, placement) with its
+    current percentage. Ads Studio's funnel uses it for the Top-of-Search rule: raise
+    the multiplier on Exact campaigns whose conversion is already stable. Metrics are
+    NOT here (the bulk's adjustment rows carry no performance columns — those come
+    from the Placement report), so the recommendation is driven by the campaign's own
+    target metrics plus this current percentage."""
+    __tablename__ = "ads_studio_placement_fact"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(String, nullable=True, index=True)
+    campaign_name = Column(String, nullable=True)
+    placement = Column(String, nullable=True)     # raw bulk value
+    percentage = Column(Float, default=0.0)
+    __table_args__ = (Index("ix_aspf_camp", "campaign_id"),)
+
+
+class AdsStudioTargetFact(Base):
+    """Ads Studio's OWN table — the Keyword / Product Targeting rows of the SAME
+    bulk `ProductAdFact` is built from. Product Ads keeps only Entity='Product Ad'
+    lines, which carry no target-level metrics, so consolidation ("which keywords
+    survive at the goal ACoS?") had nothing to read. Both tables are filled by the
+    one Product Ads upload and replaced together.
+
+    Positive targets only: Negative Keyword / Negative Product Targeting rows are
+    skipped (they carry no metrics and must never be migrated as positives). An
+    auto campaign's clause rows (close-match / loose-match / substitutes /
+    complements) ARE kept — they're real spend — but flagged `is_auto_clause` so
+    the planner never tries to re-create them in a manual campaign, which Amazon
+    rejects."""
+    __tablename__ = "ads_studio_target_fact"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 'keyword' | 'product_target'
+    entity = Column(String, nullable=True)
+    target_id = Column(String, nullable=True)     # Keyword ID / Product Targeting ID
+    campaign_id = Column(String, nullable=True, index=True)
+    campaign_name = Column(String, nullable=True)
+    # targeting kind of the owning campaign ('auto'|'keyword'|'product'|'manual')
+    campaign_type = Column(String, nullable=True)
+    ad_group_id = Column(String, nullable=True)
+    ad_group_name = Column(String, nullable=True)
+    keyword_text = Column(String, nullable=True)  # keywords only
+    match_type = Column(String, nullable=True)    # exact/phrase/broad, or the auto clause
+    expression = Column(String, nullable=True)    # product targets only
+    is_auto_clause = Column(Boolean, default=False)
+    state = Column(String, nullable=True)
+    bid = Column(Float, nullable=True)
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    spend = Column(Float, default=0.0)
+    sales = Column(Float, default=0.0)
+    orders = Column(Integer, default=0)
+    units = Column(Integer, default=0)
+    __table_args__ = (Index("ix_astf_camp", "campaign_id"),
+                      Index("ix_astf_adgroup", "ad_group_id"))
+
+
 class WaterfallRun(Base):
     """One generated Waterfall Restructure plan (RAF funnel). Lives in the BASE
     project db (restructure is account-level, not per-cadence). Items live in

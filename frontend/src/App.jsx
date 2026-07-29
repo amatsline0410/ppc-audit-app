@@ -17,6 +17,7 @@ import { TrackerPanel } from './components/Tracker.jsx'
 import { ProductCatalogPanel } from './components/Catalog.jsx'
 import { TransactionsPanel } from './components/Transactions.jsx'
 import { ProductAdsPanel } from './components/ProductAds.jsx'
+import { AdsStudioPanel } from './components/AdsStudio.jsx'
 import { MonitoringPanel } from './components/Monitoring.jsx'
 import { StoresOverview } from './components/StoresOverview.jsx'
 import { SideDrawer } from './components/Drawer.jsx'
@@ -36,6 +37,7 @@ const TABS = [
   ['stores', 'Stores', 'storefront'],
   ['ppc', 'PPC Optimization', 'ads_click'],
   ['productads', 'Product Ads', 'shopping_bag'],
+  ['adsstudio', 'Ads Studio', 'dashboard_customize'],
   ['consult', 'Tier Recommendations', 'support_agent'],
   ['waterfall', 'Waterfall', 'waterfall_chart'],
   ['cannibal', 'Cannibalization', 'call_split'],
@@ -63,6 +65,7 @@ const NAV = [
   { group: 'PPC Suite', icon: 'apps', children: [
     ['ppc', 'PPC Optimization', 'ads_click'],
     ['productads', 'Product Ads', 'shopping_bag'],
+    ['adsstudio', 'Ads Studio', 'dashboard_customize'],
     ['cannibal', 'Cannibalization', 'call_split'],
     ['channels', 'Channels', 'hub'],
     ['strategy', 'Strategy', 'strategy'],
@@ -89,7 +92,7 @@ const NAV = [
 // ---- URL routing (History API, no router dep) -------------------------------
 // path shape: /<store>/<tab-slug>[/<cadence-slug>]  e.g. /zvalves/ppc-optimization/daily-watch
 const TAB_SLUG = { dashboard: 'dashboard', stores: 'stores', ppc: 'ppc-optimization',
-  productads: 'product-ads', consult: 'tier-recommendations', waterfall: 'waterfall',
+  productads: 'product-ads', adsstudio: 'ads-studio', consult: 'tier-recommendations', waterfall: 'waterfall',
   cannibal: 'cannibalization',
   channels: 'channels', monitoring: 'monitoring',
   keywords: 'keywords', seo: 'seo', listing: 'listing-audit', products: 'product-overview',
@@ -547,6 +550,10 @@ function AppShell({ user, onLogout }) {
 
         {tab === 'reports' && (
           <ReportsPanel scope={`${store}:${project}:${auditType}:${dataVer}`} targetAcos={targetAcos} />
+        )}
+
+        {tab === 'adsstudio' && (
+          <AdsStudioPanel scope={`${store}:${project}:${auditType}:${dataVer}`} />
         )}
 
         {tab === 'productads' && (

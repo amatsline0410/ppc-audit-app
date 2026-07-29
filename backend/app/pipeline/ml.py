@@ -141,6 +141,56 @@ def p_below(orders: int, clicks: int, prior: dict, x: float) -> float:
     return betainc(a, b, min(max(x, 0.0), 1.0))
 
 
+# ---- 1-D clustering (natural breaks) -----------------------------------------
+def kmeans_1d(values: list[float], k: int, iters: int = 60) -> Optional[dict]:
+    """Lloyd's k-means on a single dimension — the "natural breaks" a performance
+    tiering needs, so the cut points follow the data's own gaps instead of an
+    arbitrary percentile.
+
+    Deterministic by construction: centroids are seeded from evenly spaced
+    **quantiles** of the data, never at random. This app persists no model, and a
+    tiering that reshuffles between two runs of the same file is worse than none.
+
+    Returns {labels, centers, breaks, k} with clusters ordered by ascending centre,
+    or None when there isn't enough distinct data to support k groups.
+    """
+    xs = np.asarray([float(v) for v in values], dtype=float)
+    if xs.size == 0 or k < 2:
+        return None
+    if not np.all(np.isfinite(xs)):
+        return None
+    if np.unique(xs).size < k:
+        return None                       # fewer distinct values than groups asked for
+
+    # quantile seeding: spread the initial centres across the distribution
+    qs = np.linspace(0, 100, k * 2 + 1)[1::2]          # k midpoints: 10%, 30%, …
+    centers = np.unique(np.percentile(xs, qs))
+    if centers.size < k:                               # ties -> spread over the range
+        centers = np.linspace(float(xs.min()), float(xs.max()), k)
+
+    labels = np.full(xs.size, -1, dtype=int)
+    for _ in range(iters):
+        new_labels = np.abs(xs[:, None] - centers[None, :]).argmin(axis=1)
+        if np.array_equal(new_labels, labels):
+            break
+        labels = new_labels
+        for i in range(centers.size):
+            members = xs[labels == i]
+            if members.size:
+                centers[i] = members.mean()
+        centers = np.sort(centers)
+
+    order = np.argsort(centers)
+    remap = {int(old): new for new, old in enumerate(order)}
+    labels = np.array([remap[int(l)] for l in labels])
+    centers = centers[order]
+    breaks = [float((centers[i] + centers[i + 1]) / 2) for i in range(centers.size - 1)]
+    return {"labels": [int(l) for l in labels],
+            "centers": [round(float(c), 6) for c in centers],
+            "breaks": [round(b, 6) for b in breaks],
+            "k": int(centers.size)}
+
+
 # ---- robust anomaly detection (median/MAD + direction-aware severity) --------
 # metric -> which direction is BAD (+1 spike-up is bad, -1 drop is bad)
 BAD_DIRECTION = {"spend": +1, "acos": +1, "cpc": +1, "sales": -1, "orders": -1,

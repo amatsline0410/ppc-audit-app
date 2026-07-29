@@ -228,7 +228,7 @@ export function ProductAdsPanel({ scope }) {
           <>
             {sel.size > 0 && <button onClick={() => setSel(new Set())} className="tag border border-edge text-mute hover:text-red mr-1">clear {sel.size}</button>}
             <button onClick={viewSelected} disabled={!sel.size || detBusy} aria-busy={detBusy}
-              className={`tag mr-2 ${sel.size ? 'bg-lime text-ink' : 'border border-edge text-mute opacity-50'}`}>
+              className={`tag mr-1 ${sel.size ? 'bg-lime text-ink' : 'border border-edge text-mute opacity-50'}`}>
               {detBusy ? 'loading…' : `▤ view selected (${sel.size})`}
             </button>
           </>

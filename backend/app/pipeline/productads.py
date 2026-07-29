@@ -73,8 +73,16 @@ def _resolve(df: pd.DataFrame) -> dict[str, str]:
         "campaign_id": find(lambda s: s == "campaign id"),
         "ad_group_id": find(lambda s: s == "ad group id"),
         "ad_id": find(lambda s: s == "ad id"),
-        "campaign_name": find(lambda s: s.startswith("campaign name")),
-        "ad_group_name": find(lambda s: s.startswith("ad group name")),
+        # Amazon fills the bare "Campaign Name" only on Campaign rows and "Ad Group
+        # Name" only on Ad Group rows — both are blank on the Product Ad / Keyword
+        # rows we actually read. The "(Informational only)" twins are filled on every
+        # row, so prefer those and keep the bare ones as the fallback.
+        "campaign_name": find(lambda s: s == "campaign name (informational only)",
+                              lambda s: s.startswith("campaign name")),
+        "ad_group_name": find(lambda s: s == "ad group name (informational only)",
+                              lambda s: s.startswith("ad group name")),
+        "campaign_name_own": find(lambda s: s == "campaign name"),
+        "ad_group_name_own": find(lambda s: s == "ad group name"),
         "state": find(lambda s: s == "state"),
         "sku": find(lambda s: s == "sku"),
         "asin": find(lambda s: s.startswith("asin")),
@@ -139,10 +147,49 @@ def classify_campaigns(df: pd.DataFrame) -> dict[str, str]:
     return out
 
 
+def name_maps(df: pd.DataFrame) -> tuple[dict[str, str], dict[str, str]]:
+    """({campaign_id: name}, {ad_group_id: name}) read off the bulk's own Campaign
+    and Ad Group entity rows — the last-resort fallback for exports that carry
+    neither a populated "Name" nor an "(Informational only)" column on child rows."""
+    cols = _resolve(df)
+    c_ent, c_cid, c_agid = cols.get("entity"), cols.get("campaign_id"), cols.get("ad_group_id")
+    c_cname, c_agname = cols.get("campaign_name_own"), cols.get("ad_group_name_own")
+    camps: dict[str, str] = {}
+    ags: dict[str, str] = {}
+    if not c_ent:
+        return camps, ags
+    for _, r in df.iterrows():
+        ent = _str(r.get(c_ent)).lower()
+        if ent == "campaign" and c_cid and c_cname:
+            cid = bulkfmt.idstr(_str(r.get(c_cid)))
+            nm = _str(r.get(c_cname))
+            if cid and nm:
+                camps[cid] = nm
+        elif ent == "ad group" and c_agid and c_agname:
+            ag = bulkfmt.idstr(_str(r.get(c_agid)))
+            nm = _str(r.get(c_agname))
+            if ag and nm:
+                ags[ag] = nm
+    return camps, ags
+
+
+def _pick_name(r, cols: dict, key: str, fallback: dict[str, str], ent_id: str | None) -> str | None:
+    """A row's campaign / ad-group name: its own column, else the name the bulk's
+    Campaign / Ad Group entity row carries for that ID. Never returns "" — callers
+    fall back to the raw ID only when there is genuinely no name anywhere."""
+    col = cols.get(key)
+    own = _str(r.get(col)) if col else ""
+    if not own:
+        col2 = cols.get(f"{key}_own")
+        own = _str(r.get(col2)) if col2 else ""
+    return own or (fallback.get(ent_id) if ent_id else None) or None
+
+
 def _rows_from_df(df: pd.DataFrame, ctypes: dict[str, str]) -> list[dict]:
     cols = _resolve(df)
     if not cols.get("entity"):
         raise ValueError("That sheet has no 'Entity' column — is it the Sponsored Products bulk?")
+    camp_names, ag_names = name_maps(df)
     rows = []
     for _, r in df.iterrows():
         if _str(r.get(cols["entity"])).lower() != "product ad":
@@ -152,14 +199,15 @@ def _rows_from_df(df: pd.DataFrame, ctypes: dict[str, str]) -> list[dict]:
         if not asin and not sku:
             continue
         cid = bulkfmt.idstr(_str(r.get(cols["campaign_id"]))) if cols.get("campaign_id") else None
+        agid = bulkfmt.idstr(_str(r.get(cols["ad_group_id"]))) if cols.get("ad_group_id") else None
         rows.append(dict(
             ad_id=bulkfmt.idstr(_str(r.get(cols["ad_id"]))) if cols.get("ad_id") else None,
             asin=asin or None, sku=sku or None,
             campaign_id=cid,
-            campaign_name=(_str(r.get(cols["campaign_name"])) if cols.get("campaign_name") else "") or None,
+            campaign_name=_pick_name(r, cols, "campaign_name", camp_names, cid),
             campaign_type=ctypes.get(cid) if cid else None,
-            ad_group_id=bulkfmt.idstr(_str(r.get(cols["ad_group_id"]))) if cols.get("ad_group_id") else None,
-            ad_group_name=(_str(r.get(cols["ad_group_name"])) if cols.get("ad_group_name") else "") or None,
+            ad_group_id=agid,
+            ad_group_name=_pick_name(r, cols, "ad_group_name", ag_names, agid),
             state=(_str(r.get(cols["state"])) if cols.get("state") else "") or None,
             impressions=int(_num(r.get(cols["impressions"])) if cols.get("impressions") else 0),
             clicks=int(_num(r.get(cols["clicks"])) if cols.get("clicks") else 0),
@@ -225,16 +273,21 @@ def _type_counts(cmap: dict[str, str]) -> dict:
     return c
 
 
-def summary(db: Session) -> dict:
+def summary(db: Session, model=None) -> dict:
     """One row per (ASIN, SKU): underlying Product Ads summed, rates recomputed from
     raw counts; plus one account total. Also traces each SKU's campaigns by targeting
-    kind (Automatic / Keyword-target / Product-target). All from `ProductAdFact`."""
-    _ensure_schema(db)
+    kind (Automatic / Keyword-target / Product-target).
+
+    `model` defaults to `ProductAdFact`; Ads Studio passes its own `AdsStudioAdFact`
+    so the two panels render an identical table off independent uploads."""
+    model = model or md.ProductAdFact
+    if model is md.ProductAdFact:
+        _ensure_schema(db)
     groups: dict[tuple, dict] = {}
     acct_types: dict[str, str] = {}     # every distinct campaign_id -> type, account-wide
     t_im = t_cl = t_od = t_un = 0
     t_sp = t_sa = 0.0
-    for r in db.query(md.ProductAdFact).all():
+    for r in db.query(model).all():
         key = (r.asin, r.sku)
         g = groups.get(key)
         if g is None:
